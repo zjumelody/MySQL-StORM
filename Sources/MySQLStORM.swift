@@ -7,7 +7,7 @@
 //
 
 import StORM
-import MySQL
+import PerfectMySQL
 import PerfectLogger
 
 /// MySQLConnector sets the connection parameters for the PostgreSQL Server access
@@ -23,6 +23,9 @@ public struct MySQLConnector {
 	public static var password: String	= ""
 	public static var database: String	= ""
 	public static var port: Int			= 3306
+	public static var charset: String	= "utf8mb4"
+
+	public static var quiet: Bool		= false
 
 	private init(){}
 
@@ -39,7 +42,8 @@ open class MySQLStORM: StORM, StORMProtocol {
 	/// Table that the child object relates to in the database.
 	/// Defined as "open" as it is meant to be overridden by the child class.
 	open func table() -> String {
-		return "unset"
+		let m = Mirror(reflecting: self)
+		return ("\(m.subjectType)").lowercased()
 	}
 
 	/// Public init
@@ -61,7 +65,8 @@ open class MySQLStORM: StORM, StORMProtocol {
 			username:	MySQLConnector.username,
 			password:	MySQLConnector.password,
 			database:	MySQLConnector.database,
-			port:		MySQLConnector.port
+			port:		MySQLConnector.port,
+			charset:	MySQLConnector.charset
 		)
 
 
@@ -96,7 +101,8 @@ open class MySQLStORM: StORM, StORMProtocol {
 			username:	MySQLConnector.username,
 			password:	MySQLConnector.password,
 			database:	MySQLConnector.database,
-			port:		MySQLConnector.port
+			port:		MySQLConnector.port,
+			charset:	MySQLConnector.charset
 		)
 		thisConnection.open()
 		//		defer { thisConnection.server.close() }
@@ -115,8 +121,10 @@ open class MySQLStORM: StORM, StORMProtocol {
 
 		res = lastStatement?.execute()
 		guard res! else {
-			print(thisConnection.server.errorMessage())
-			print(thisConnection.server.errorCode())
+			if !MySQLConnector.quiet {
+				print(thisConnection.server.errorMessage())
+				print(thisConnection.server.errorCode())
+			}
 			throw StORMError.error(thisConnection.server.errorMessage())
 		}
 
@@ -137,7 +145,8 @@ open class MySQLStORM: StORM, StORMProtocol {
 			username:	MySQLConnector.username,
 			password:	MySQLConnector.password,
 			database:	MySQLConnector.database,
-			port:		MySQLConnector.port
+			port:		MySQLConnector.port,
+			charset:	MySQLConnector.charset
 		)
 
 		thisConnection.open()
@@ -199,7 +208,6 @@ open class MySQLStORM: StORM, StORMProtocol {
 	/// Designed as "open" so it can be overriden and customized.
 	/// If an ID has been defined, save() will perform an updae, otherwise a new document is created.
 	/// On error can throw a StORMError error.
-	@discardableResult
 	open func save() throws {
 		do {
 			if keyIsEmpty() {
@@ -219,7 +227,6 @@ open class MySQLStORM: StORM, StORMProtocol {
 	/// Designed as "open" so it can be overriden and customized.
 	/// If an ID has been defined, save() will perform an updae, otherwise a new document is created.
 	/// On error can throw a StORMError error.
-	@discardableResult
 	open func save(set: (_ id: Any)->Void) throws {
 		do {
 			if keyIsEmpty() {
@@ -236,7 +243,6 @@ open class MySQLStORM: StORM, StORMProtocol {
 	}
 
 	/// Unlike the save() methods, create() mandates the addition of a new document, regardless of whether an ID has been set or specified.
-	@discardableResult
 	override open func create() throws {
 		do {
 			try insert(asData())
@@ -248,14 +254,12 @@ open class MySQLStORM: StORM, StORMProtocol {
 
 
 	/// Table Creation (alias for setup)
-	@discardableResult
 	open func setupTable(_ str: String = "") throws {
 		try setup(str)
 	}
 
 	/// Table Creation
 	/// Requires the connection to be configured, as well as a valid "table" property to have been set in the class
-	@discardableResult
 	open func setup(_ str: String = "") throws {
 		LogFile.info("Running setup: \(table())", logFile: "./StORMlog.txt")
 		var createStatement = str
@@ -267,7 +271,7 @@ open class MySQLStORM: StORM, StORMProtocol {
 					continue
 				}
 				var verbage = ""
-				if !key.hasPrefix("internal_") {
+				if !key.hasPrefix("internal_") && !key.hasPrefix("_") {
 					verbage = "`\(key)` "
 					if child.value is Int && opt.count == 0 {
 						verbage += "int"
